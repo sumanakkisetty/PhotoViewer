@@ -13,7 +13,7 @@ if (-not $Independent) {
 
 # ===== HARD-CODED FILE PATH =====
 # Set your image path here (leave empty to show file dialog)
-$hardCodedImagePath = "C:\Users\suman\OneDrive\Desktop\Anjaneya.jpg"
+$hardCodedImagePath = "C:\Users\YourName\Desktop\photo.jpg"
 # ================================
 
 # ===== CUSTOM TITLE =====
