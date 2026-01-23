@@ -1,0 +1,20 @@
+# Windows thumbnail cache
+Thumbs.db
+
+# Folder config file
+Desktop.ini
+
+# Recycle Bin
+$RECYCLE.BIN/
+
+# User-specific files
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.gif
+*.tiff
+*.ico
+
+# Keep example structure but ignore actual images
+!example.jpg
