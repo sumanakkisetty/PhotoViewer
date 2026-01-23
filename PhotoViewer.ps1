@@ -18,7 +18,7 @@ $hardCodedImagePath = "C:\Users\YourName\Desktop\photo.jpg"
 
 # ===== CUSTOM TITLE =====
 # Set your custom title here (leave empty to show file name)
-$customTitle = "<<<Your Own Name>>>"
+$customTitle = "<<<  Your Own Name  >>>"
 # ========================
 
 Add-Type -AssemblyName System.Windows.Forms
