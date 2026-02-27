@@ -13,12 +13,12 @@ if (-not $Independent) {
 
 # ===== HARD-CODED FILE PATH =====
 # Set your image path here (leave empty to show file dialog)
-$hardCodedImagePath = "C:\Users\YourName\Desktop\photo.jpg"
+$hardCodedImagePath = "C:\Users\suman\OneDrive\Desktop\Anjaneya.jpg"
 # ================================
 
 # ===== CUSTOM TITLE =====
 # Set your custom title here (leave empty to show file name)
-$customTitle = "<<<  Your Own Name  >>>"
+$customTitle = "Om Sri Anjaneya"
 # ========================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -127,7 +127,7 @@ $titleLabel.ForeColor = [System.Drawing.Color]::FromArgb(255, 40, 40, 50)  # Dar
 $titleLabel.BackColor = [System.Drawing.Color]::Transparent
 $titleLabel.AutoSize = $true
 $titleLabel.TextAlign = 'MiddleCenter'
-$titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
+$titleLabel.Font = New-Object System.Drawing.Font("Courier New", 12, [System.Drawing.FontStyle]::Bold)
 $titleLabel.Padding = New-Object System.Windows.Forms.Padding(10, 5, 10, 5)
 $titleBar.Controls.Add($titleLabel)
 
