@@ -5,7 +5,8 @@ A lightweight PowerShell-based photo viewer for Windows that displays images as 
 ## ✨ Features
 
 - 🖼️ **Always Visible** - Stays on desktop even when pressing Windows+D
-- 🎨 **Borderless Window** - Clean, minimalist design with custom black title bar
+- 🎨 **Glass Blur Effect** - Modern Apple-inspired design with glass blur effect, semi-transparent background, and rounded corners for visual depth
+- 🎚️ **Adjustable Transparency** - Control background transparency level with keyboard shortcuts (image stays opaque)
 - 📌 **Background Layer** - Stays behind all other windows automatically
 - 🔒 **Independent Process** - Runs separately, closing PowerShell won't affect it
 - 📏 **Fully Resizable** - Drag edges/corners with mouse or use keyboard shortcuts
@@ -50,6 +51,9 @@ $hardCodedImagePath = "C:\Users\YourName\Desktop\photo.jpg"
 
 # Set custom window title (leave empty to show filename)
 $customTitle = "My Custom Title"
+
+# Set default background transparency (100-255, lower = darker/more tinted glass)
+$script:glassLightness = 255
 ```
 
 ## ⌨️ Keyboard Shortcuts
@@ -65,10 +69,12 @@ $customTitle = "My Custom Title"
 | **Ctrl + 0** | Reset zoom to 100% |
 | **Ctrl + F** | Fit to window |
 | **Ctrl + Shift + Arrow Keys** | Resize window |
+| **Ctrl + Up Arrow** | Lighter glass background (more see-through) |
+| **Ctrl + Down Arrow** | Darker glass background (more tinted) |
+| **Ctrl + R** | Reset transparency to default |
 
 ## 🖱️ Mouse Controls
 
-- **Drag title bar** - Move window
 - **Drag edges/corners** - Resize window
 - **Ctrl + Mouse Wheel** - Zoom in/out
 
@@ -76,8 +82,13 @@ $customTitle = "My Custom Title"
 
 - ✅ Shows in taskbar with custom title
 - ✅ Stays behind all other windows
+- ✅ Fixed position on desktop (centered, not movable)
 - ✅ Survives Windows+D (auto-restores if minimized)
 - ✅ Auto-centers on resize
+- ✅ Glass blur effect for semi-transparent background
+- ✅ Adjustable glass tint for background/borders/title bar (Ctrl+Up/Down) - image stays fully clear and opaque
+- ✅ Rounded corners for modern Apple-inspired look
+- ✅ Title bar at bottom with user-controllable glass transparency
 - ✅ Runs as independent process
 - ✅ Only closeable via ESC or Ctrl+Q (no X button)
 
@@ -127,6 +138,10 @@ The window automatically restores if Windows+D is pressed. If it minimizes, it w
 ## 📝 Notes
 
 - The script uses Windows Forms, which is built into Windows
+- Glass blur effect uses Windows DWM (Desktop Window Manager) API for modern visual effects
+- Rounded corners (20px radius) for Apple-inspired modern design
+- Transparency controls only affect the background/borders - the image itself stays fully opaque
+- Title bar is positioned at the bottom for better visibility
 - Runs as a completely independent process
 - PowerShell console is automatically hidden
 - Window position is auto-centered on launch and resize

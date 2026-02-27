@@ -24,6 +24,9 @@ $customTitle = "<<<  Your Own Name  >>>"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# Background transparency/lightness control variable for glass effect
+$script:glassLightness = 255  # Default lightness (100-255, where 255 is white/lightest)
+
 # Create the main form
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Photo Viewer"
@@ -31,7 +34,8 @@ $form.WindowState = 'Normal'
 $form.StartPosition = 'CenterScreen'
 $form.Size = New-Object System.Drawing.Size(800, 600)
 $form.FormBorderStyle = 'None'  # Borderless for custom title bar
-$form.BackColor = [System.Drawing.Color]::Black
+$form.BackColor = [System.Drawing.Color]::Magenta  # Magenta becomes transparent
+$form.TransparencyKey = [System.Drawing.Color]::Magenta  # Make magenta fully transparent for glass effect
 $form.KeyPreview = $true
 $form.ShowIcon = $false
 $form.ShowInTaskbar = $true  # Show in taskbar
@@ -43,7 +47,7 @@ $form.Add_Resize({
     }
 })
 
-# Add Win32 API to keep window behind others and prevent Windows+D minimize
+# Add Win32 API to keep window behind others and enable blur effect
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
@@ -57,73 +61,103 @@ public class WindowHelper {
     [DllImport("user32.dll")]
     public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
     
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmEnableBlurBehindWindow(IntPtr hWnd, ref DWM_BLURBEHIND pBlurBehind);
+    
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS pMargins);
+    
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    
     public static readonly IntPtr HWND_BOTTOM = new IntPtr(1);
     public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOACTIVATE = 0x0010;
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TOOLWINDOW = 0x00000080;
+    public const int WS_EX_LAYERED = 0x80000;
+    public const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
+    public const int DWMSBT_AUTO = 0;
+    public const int DWMSBT_NONE = 1;
+    public const int DWMSBT_MAINWINDOW = 2;
+    public const int DWMSBT_TRANSIENTWINDOW = 3;
+    public const int DWMSBT_TABBEDWINDOW = 4;
+    
+    [StructLayout(LayoutKind.Sequential)]
+    public struct DWM_BLURBEHIND {
+        public int dwFlags;
+        public bool fEnable;
+        public IntPtr hRgnBlur;
+        public bool fTransitionOnMaximized;
+    }
+    
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MARGINS {
+        public int Left;
+        public int Right;
+        public int Top;
+        public int Bottom;
+    }
+    
+    public const int DWM_BB_ENABLE = 0x1;
+    public const int DWM_BB_BLURREGION = 0x2;
 }
 "@
 
-# Create custom black title bar
+# Create background panel (this is what shows as "glass" in borders)
+$backgroundPanel = New-Object System.Windows.Forms.Panel
+$backgroundPanel.Dock = 'Fill'
+$backgroundPanel.BackColor = [System.Drawing.Color]::FromArgb($script:glassLightness, $script:glassLightness, $script:glassLightness)  # Adjustable gray for glass
+
+$form.Controls.Add($backgroundPanel)
+
+# Create custom title bar at bottom
 $titleBar = New-Object System.Windows.Forms.Panel
-$titleBar.Height = 30
-$titleBar.Dock = 'Top'
-$titleBar.BackColor = [System.Drawing.Color]::Black
-$form.Controls.Add($titleBar)
+$titleBar.Height = 40
+$titleBar.Dock = 'Bottom'
+$titleBar.BackColor = [System.Drawing.Color]::FromArgb($script:glassLightness, $script:glassLightness, $script:glassLightness)  # User-controllable glass
+
+$backgroundPanel.Controls.Add($titleBar)
 
 # Title label in the custom title bar
 $titleLabel = New-Object System.Windows.Forms.Label
 $titleLabel.Text = "Photo Viewer"
-$titleLabel.ForeColor = [System.Drawing.Color]::White
-$titleLabel.Dock = 'Fill'
+$titleLabel.ForeColor = [System.Drawing.Color]::FromArgb(255, 40, 40, 50)  # Dark text for contrast on light glass
+$titleLabel.BackColor = [System.Drawing.Color]::Transparent
+$titleLabel.AutoSize = $true
 $titleLabel.TextAlign = 'MiddleCenter'
-$titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
+$titleLabel.Padding = New-Object System.Windows.Forms.Padding(10, 5, 10, 5)
 $titleBar.Controls.Add($titleLabel)
 
-# Variables for dragging and resizing
-$script:isDragging = $false
+# Center the title label in the title bar
+$titleBar.Add_Resize({
+    $titleLabel.Location = New-Object System.Drawing.Point(
+        [int](($titleBar.Width - $titleLabel.Width) / 2),
+        [int](($titleBar.Height - $titleLabel.Height) / 2)
+    )
+})
+
+# Variables for resizing only (no dragging)
 $script:isResizing = $false
 $script:resizeDirection = ""
 $script:dragStart = New-Object System.Drawing.Point(0, 0)
 $script:resizeBorderWidth = 5
 
-# Title bar dragging
-$titleBar.Add_MouseDown({
-    param($sender, $e)
-    if ($e.Button -eq 'Left') {
-        $script:isDragging = $true
-        $script:dragStart = $e.Location
-    }
-})
-
-$titleBar.Add_MouseMove({
-    param($sender, $e)
-    if ($script:isDragging) {
-        $currentScreenPos = [System.Windows.Forms.Control]::MousePosition
-        $newLocation = New-Object System.Drawing.Point(
-            ($currentScreenPos.X - $script:dragStart.X),
-            ($currentScreenPos.Y - $script:dragStart.Y)
-        )
-        $form.Location = $newLocation
-    }
-})
-
-$titleBar.Add_MouseUp({
-    param($sender, $e)
-    if ($e.Button -eq 'Left') {
-        $script:isDragging = $false
-    }
-})
-
 # Create PictureBox to display the image
+# Magenta background makes empty areas transparent, showing backgroundPanel
+$imageContainer = New-Object System.Windows.Forms.Panel
+$imageContainer.Dock = 'Fill'
+$imageContainer.BackColor = [System.Drawing.Color]::Magenta  # Transparent areas show background
+
 $pictureBox = New-Object System.Windows.Forms.PictureBox
 $pictureBox.Dock = 'Fill'
 $pictureBox.SizeMode = 'Zoom'  # Maintain aspect ratio while fitting window
-$pictureBox.BackColor = [System.Drawing.Color]::Black
-$form.Controls.Add($pictureBox)
-$pictureBox.BringToFront()  # Ensure picture is behind title bar
+$pictureBox.BackColor = [System.Drawing.Color]::Magenta  # Transparent where no image
+$imageContainer.Controls.Add($pictureBox)
+
+$backgroundPanel.Controls.Add($imageContainer)
 
 # Zoom variables
 $script:zoomFactor = 1.0
@@ -192,6 +226,11 @@ function Load-Image {
             }
             $form.Text = $displayTitle
             $titleLabel.Text = $displayTitle
+            # Recenter the title label after text change
+            $titleLabel.Location = New-Object System.Drawing.Point(
+                [int](($titleBar.Width - $titleLabel.Width) / 2),
+                [int](($titleBar.Height - $titleLabel.Height) / 2)
+            )
         }
         catch {
             [System.Windows.Forms.MessageBox]::Show("Failed to load image: $_", "Error", 
@@ -216,6 +255,14 @@ function Open-FileDialog {
     if ($openFileDialog.ShowDialog() -eq 'OK') {
         Load-Image -imagePath $openFileDialog.FileName
     }
+}
+
+# Function to update background transparency
+function Update-BackgroundTransparency {
+    # Update background panel color for glass tint control
+    $backgroundPanel.BackColor = [System.Drawing.Color]::FromArgb($script:glassLightness, $script:glassLightness, $script:glassLightness)
+    # Update title bar to match glassLightness
+    $titleBar.BackColor = [System.Drawing.Color]::FromArgb($script:glassLightness, $script:glassLightness, $script:glassLightness)
 }
 
 # Keyboard shortcuts
@@ -278,6 +325,28 @@ $form.Add_KeyDown({
             'Up' { if ($form.Height -gt 200) { $form.Height -= $step } }
         }
         Center-Window
+        Apply-RoundedCorners -radius 20  # Reapply rounded corners after resize
+        $e.Handled = $true
+    }
+    
+    # Increase Transparency: Ctrl+Up Arrow (lighter glass, more see-through)
+    if ($e.Control -and $e.KeyCode -eq 'Up' -and -not $e.Shift) {
+        $script:glassLightness = [Math]::Max(100, $script:glassLightness - 10)
+        Update-BackgroundTransparency
+        $e.Handled = $true
+    }
+    
+    # Decrease Transparency: Ctrl+Down Arrow (darker glass, more tinted)
+    if ($e.Control -and $e.KeyCode -eq 'Down' -and -not $e.Shift) {
+        $script:glassLightness = [Math]::Min(255, $script:glassLightness + 10)
+        Update-BackgroundTransparency
+        $e.Handled = $true
+    }
+    
+    # Reset Transparency: Ctrl+R
+    if ($e.Control -and $e.KeyCode -eq 'R') {
+        $script:glassLightness = 255
+        Update-BackgroundTransparency
         $e.Handled = $true
     }
 })
@@ -412,6 +481,141 @@ $pictureBox.Add_MouseLeave({
     }
 })
 
+# BackgroundPanel resize with mouse
+$backgroundPanel.Add_MouseMove({
+    param($sender, $e)
+    
+    $borderWidth = $script:resizeBorderWidth
+    $panelWidth = $backgroundPanel.Width
+    $panelHeight = $backgroundPanel.Height
+    
+    if (-not $script:isResizing) {
+        $nearLeft = $e.X -lt $borderWidth
+        $nearRight = $e.X -gt ($panelWidth - $borderWidth)
+        $nearTop = $e.Y -lt $borderWidth
+        $nearBottom = $e.Y -gt ($panelHeight - $borderWidth)
+        
+        if ($nearTop -and $nearLeft) {
+            $backgroundPanel.Cursor = [System.Windows.Forms.Cursors]::SizeNWSE
+            $script:resizeDirection = "TopLeft"
+        }
+        elseif ($nearTop -and $nearRight) {
+            $backgroundPanel.Cursor = [System.Windows.Forms.Cursors]::SizeNESW
+            $script:resizeDirection = "TopRight"
+        }
+        elseif ($nearBottom -and $nearLeft) {
+            $backgroundPanel.Cursor = [System.Windows.Forms.Cursors]::SizeNESW
+            $script:resizeDirection = "BottomLeft"
+        }
+        elseif ($nearBottom -and $nearRight) {
+            $backgroundPanel.Cursor = [System.Windows.Forms.Cursors]::SizeNWSE
+            $script:resizeDirection = "BottomRight"
+        }
+        elseif ($nearLeft) {
+            $backgroundPanel.Cursor = [System.Windows.Forms.Cursors]::SizeWE
+            $script:resizeDirection = "Left"
+        }
+        elseif ($nearRight) {
+            $backgroundPanel.Cursor = [System.Windows.Forms.Cursors]::SizeWE
+            $script:resizeDirection = "Right"
+        }
+        elseif ($nearTop) {
+            $backgroundPanel.Cursor = [System.Windows.Forms.Cursors]::SizeNS
+            $script:resizeDirection = "Top"
+        }
+        elseif ($nearBottom) {
+            $backgroundPanel.Cursor = [System.Windows.Forms.Cursors]::SizeNS
+            $script:resizeDirection = "Bottom"
+        }
+        else {
+            $backgroundPanel.Cursor = [System.Windows.Forms.Cursors]::Default
+            $script:resizeDirection = ""
+        }
+    }
+})
+
+$backgroundPanel.Add_MouseDown({
+    param($sender, $e)
+    if ($e.Button -eq 'Left' -and $script:resizeDirection -ne "") {
+        $script:isResizing = $true
+        $script:dragStart = [System.Windows.Forms.Control]::MousePosition
+    }
+})
+
+$backgroundPanel.Add_MouseUp({
+    param($sender, $e)
+    if ($e.Button -eq 'Left') {
+        $script:isResizing = $false
+    }
+})
+
+$backgroundPanel.Add_MouseLeave({
+    if (-not $script:isResizing) {
+        $backgroundPanel.Cursor = [System.Windows.Forms.Cursors]::Default
+    }
+})
+
+# TitleBar resize with mouse
+$titleBar.Add_MouseMove({
+    param($sender, $e)
+    
+    $borderWidth = $script:resizeBorderWidth
+    $barWidth = $titleBar.Width
+    $barHeight = $titleBar.Height
+    
+    if (-not $script:isResizing) {
+        $nearLeft = $e.X -lt $borderWidth
+        $nearRight = $e.X -gt ($barWidth - $borderWidth)
+        $nearBottom = $e.Y -gt ($barHeight - $borderWidth)
+        
+        if ($nearBottom -and $nearLeft) {
+            $titleBar.Cursor = [System.Windows.Forms.Cursors]::SizeNESW
+            $script:resizeDirection = "BottomLeft"
+        }
+        elseif ($nearBottom -and $nearRight) {
+            $titleBar.Cursor = [System.Windows.Forms.Cursors]::SizeNWSE
+            $script:resizeDirection = "BottomRight"
+        }
+        elseif ($nearLeft) {
+            $titleBar.Cursor = [System.Windows.Forms.Cursors]::SizeWE
+            $script:resizeDirection = "Left"
+        }
+        elseif ($nearRight) {
+            $titleBar.Cursor = [System.Windows.Forms.Cursors]::SizeWE
+            $script:resizeDirection = "Right"
+        }
+        elseif ($nearBottom) {
+            $titleBar.Cursor = [System.Windows.Forms.Cursors]::SizeNS
+            $script:resizeDirection = "Bottom"
+        }
+        else {
+            $titleBar.Cursor = [System.Windows.Forms.Cursors]::Default
+            $script:resizeDirection = ""
+        }
+    }
+})
+
+$titleBar.Add_MouseDown({
+    param($sender, $e)
+    if ($e.Button -eq 'Left' -and $script:resizeDirection -ne "") {
+        $script:isResizing = $true
+        $script:dragStart = [System.Windows.Forms.Control]::MousePosition
+    }
+})
+
+$titleBar.Add_MouseUp({
+    param($sender, $e)
+    if ($e.Button -eq 'Left') {
+        $script:isResizing = $false
+    }
+})
+
+$titleBar.Add_MouseLeave({
+    if (-not $script:isResizing) {
+        $titleBar.Cursor = [System.Windows.Forms.Cursors]::Default
+    }
+})
+
 $form.Add_MouseDown({
     param($sender, $e)
     if ($e.Button -eq 'Left' -and $script:resizeDirection -ne "") {
@@ -505,6 +709,7 @@ $script:resizeTimer.Add_Tick({
             $form.Size = $newSize
             $script:dragStart = $currentPos
             Center-Window
+            Apply-RoundedCorners -radius 20  # Reapply rounded corners after resize
         }
     }
     catch {
@@ -570,9 +775,58 @@ function Set-WindowBottom {
     )
 }
 
+# Function to enable glass blur effect
+function Enable-BlurBehind {
+    try {
+        $blurBehind = New-Object WindowHelper+DWM_BLURBEHIND
+        $blurBehind.dwFlags = [WindowHelper]::DWM_BB_ENABLE
+        $blurBehind.fEnable = $true
+        $blurBehind.hRgnBlur = [IntPtr]::Zero
+        $blurBehind.fTransitionOnMaximized = $false
+        
+        [WindowHelper]::DwmEnableBlurBehindWindow($form.Handle, [ref]$blurBehind)
+        
+        # Extend glass frame into client area for better blur effect
+        $margins = New-Object WindowHelper+MARGINS
+        $margins.Left = -1
+        $margins.Right = -1
+        $margins.Top = -1
+        $margins.Bottom = -1
+        [WindowHelper]::DwmExtendFrameIntoClientArea($form.Handle, [ref]$margins)
+    }
+    catch {
+        # Blur not available, continue without it
+    }
+}
+
+# Function to apply rounded corners
+function Apply-RoundedCorners {
+    param([int]$radius = 20)
+    
+    try {
+        $rect = New-Object System.Drawing.Rectangle(0, 0, $form.Width, $form.Height)
+        $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+        
+        # Create rounded rectangle path
+        $path.AddArc($rect.X, $rect.Y, $radius, $radius, 180, 90)
+        $path.AddArc($rect.Right - $radius, $rect.Y, $radius, $radius, 270, 90)
+        $path.AddArc($rect.Right - $radius, $rect.Bottom - $radius, $radius, $radius, 0, 90)
+        $path.AddArc($rect.X, $rect.Bottom - $radius, $radius, $radius, 90, 90)
+        $path.CloseFigure()
+        
+        $form.Region = New-Object System.Drawing.Region($path)
+        $path.Dispose()
+    }
+    catch {
+        # Rounded corners not available, continue without them
+    }
+}
+
 # Set window to bottom when shown
 $form.Add_Shown({
     Center-Window
+    Enable-BlurBehind
+    Apply-RoundedCorners -radius 20
     Set-WindowBottom
 })
 
